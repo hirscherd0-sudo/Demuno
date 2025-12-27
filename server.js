@@ -9,22 +9,37 @@ const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-// Statische Dateien (CSS, JS, Bilder) aus dem aktuellen Ordner bereitstellen
-app.use(express.static(path.join(__dirname, '/')));
+// KORREKTUR: Wir sagen dem Server, dass statische Dateien im Ordner 'public' liegen
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Hauptseite ausliefern - HIER WAR DER FEHLER (path.join statt __join)
+console.log("Server gestartet. Suche Dateien im Ordner:", path.join(__dirname, 'public'));
+
+// Explizite Route für die Startseite
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    // KORREKTUR: Pfad zeigt jetzt auf public/index.html
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    
+    res.sendFile(indexPath, (err) => {
+        if (err) {
+            console.error("KRITISCHER FEHLER: index.html nicht gefunden!", err);
+            res.status(500).send(`
+                <h1>Fehler 500</h1>
+                <p>Die Datei <b>index.html</b> wurde nicht gefunden.</p>
+                <p>Der Server sucht hier: ${indexPath}</p>
+                <p>Bitte stelle sicher, dass ein Ordner namens 'public' existiert und die Datei dort liegt.</p>
+            `);
+        }
+    });
 });
 
-// --- SPIEL LOGIK ---
+// --- SPIEL LOGIK (Unverändert) ---
 const COLORS = ['red', 'blue', 'green', 'yellow'];
 const VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'Jump Scare', 'Ritual', 'Blutpakt'];
 
 class GameRoom {
     constructor(roomId) {
         this.roomId = roomId;
-        this.players = []; // Array of objects {id, name, hand, socketId}
+        this.players = []; 
         this.deck = [];
         this.discardPile = [];
         this.currentPlayerIndex = 0;
@@ -124,9 +139,8 @@ class GameRoom {
         player.hand.splice(cardIndex, 1);
         this.discardPile.push(card);
         
-        // Farben Logik
         if (card.color === 'black') {
-            this.activeColor = chosenColor || 'red'; // Fallback
+            this.activeColor = chosenColor || 'red'; 
         } else {
             this.activeColor = card.color;
         }
@@ -138,33 +152,30 @@ class GameRoom {
             this.gameActive = false;
             this.statusMessage = `${player.name} wurde ERLÖST!`;
             this.broadcastState();
-            return; // Spiel Ende
+            return; 
         }
 
-        if (card.value === 'Jump Scare') { // Skip
+        if (card.value === 'Jump Scare') { 
             skipNext = true;
             this.statusMessage = `${player.name} erschreckt den Nächsten!`;
-        } else if (card.value === 'Ritual') { // Reverse
+        } else if (card.value === 'Ritual') { 
             this.direction *= -1;
-            if (this.players.length === 2) skipNext = true; // Bei 2 Spielern wirkt Reverse wie Skip
+            if (this.players.length === 2) skipNext = true; 
             this.statusMessage = "Die Richtung ändert sich...";
-        } else if (card.value === 'Blutpakt') { // +2
+        } else if (card.value === 'Blutpakt') { 
             skipNext = true;
-            // Finde das Opfer (um Namen anzuzeigen)
             let nextIdx = this.currentPlayerIndex + this.direction;
             if (nextIdx >= this.players.length) nextIdx = 0;
             if (nextIdx < 0) nextIdx = this.players.length - 1;
             const victim = this.players[nextIdx];
-            
             victim.hand.push(...this.drawCards(2));
             this.statusMessage = `${victim.name} opfert Blut (+2)`;
-        } else if (card.value === 'Dunkler Pakt') { // +4
+        } else if (card.value === 'Dunkler Pakt') { 
             skipNext = true;
              let nextIdx = this.currentPlayerIndex + this.direction;
             if (nextIdx >= this.players.length) nextIdx = 0;
             if (nextIdx < 0) nextIdx = this.players.length - 1;
             const victim = this.players[nextIdx];
-            
             victim.hand.push(...this.drawCards(4));
             this.statusMessage = `${victim.name} geht einen dunklen Pakt ein (+4)`;
         } else {
@@ -187,7 +198,6 @@ class GameRoom {
     }
     
     broadcastState() {
-        // Wir senden an jeden Spieler eine angepasste Ansicht (er sieht nur seine Karten)
         this.players.forEach(p => {
             const opponents = this.players.filter(pl => pl.id !== p.id).map(pl => ({
                 name: pl.name,
@@ -212,13 +222,10 @@ class GameRoom {
 const rooms = {};
 
 io.on('connection', (socket) => {
-    console.log('Ein Schatten nähert sich:', socket.id);
-
     socket.on('joinGame', ({ name, roomId }) => {
         if (!rooms[roomId]) {
             rooms[roomId] = new GameRoom(roomId);
         }
-        
         const room = rooms[roomId];
         const existingPlayer = room.players.find(p => p.socketId === socket.id);
         
@@ -230,7 +237,6 @@ io.on('connection', (socket) => {
                 socketId: socket.id
             });
             socket.join(roomId);
-            
             io.to(roomId).emit('lobbyUpdate', { 
                 players: room.players.map(p => p.name),
                 isHost: room.players[0].socketId === socket.id
@@ -284,7 +290,7 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Das Portal ist geöffnet auf Port ${PORT}`);
+    console.log(`Server gestartet auf Port ${PORT}`);
 });
 
 
