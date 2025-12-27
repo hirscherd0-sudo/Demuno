@@ -32,7 +32,7 @@ class GameRoom {
         this.activeColor = '';
         this.gameActive = false;
         this.statusMessage = "Warte auf Spieler...";
-        this.turnTimer = null; // Timer für Spielzüge
+        this.turnTimer = null; 
     }
 
     buildDeck() {
@@ -89,26 +89,25 @@ class GameRoom {
         this.gameActive = true;
         this.statusMessage = "Die Nacht beginnt...";
         
-        this.startTurnTimer(); // Timer starten
+        this.startTurnTimer(); 
         return true;
     }
 
-    // Startet den 60s Timer für den aktuellen Spieler
     startTurnTimer() {
         if (this.turnTimer) clearTimeout(this.turnTimer);
         
+        // 60 Sekunden Limit pro Zug
         this.turnTimer = setTimeout(() => {
             if (this.gameActive) {
                 const pName = this.players[this.currentPlayerIndex].name;
                 this.statusMessage = `${pName} hat geschlafen! (Zeit abgelaufen)`;
                 
-                // Strafe: 1 Karte ziehen und Zug vorbei
                 this.players[this.currentPlayerIndex].hand.push(...this.drawCards(1));
                 
                 this.nextPlayer();
                 this.broadcastState();
             }
-        }, 60000); // 60 Sekunden = 1 Minute
+        }, 60000); 
     }
 
     nextPlayer(skip = false) {
@@ -122,10 +121,9 @@ class GameRoom {
             if (n < 0) n = this.players.length - 1;
         }
         this.currentPlayerIndex = n;
-        this.startTurnTimer(); // Timer für neuen Spieler neu starten
+        this.startTurnTimer(); 
     }
 
-    // Hilfsfunktion: Kann diese Karte gelegt werden?
     isValidMove(card) {
         const top = this.discardPile[this.discardPile.length - 1];
         if (card.color === 'black') return true;
@@ -143,9 +141,8 @@ class GameRoom {
         const player = this.players[pIndex];
         const card = player.hand[cardIndex];
         
-        if (!this.isValidMove(card)) return; // Nochmaliger Check
+        if (!this.isValidMove(card)) return;
 
-        // Karte spielen
         player.hand.splice(cardIndex, 1);
         this.discardPile.push(card);
         
@@ -155,7 +152,6 @@ class GameRoom {
             this.activeColor = card.color;
         }
 
-        // Timer stoppen, da Zug gemacht wurde
         if (this.turnTimer) clearTimeout(this.turnTimer);
 
         let skipNext = false;
@@ -204,24 +200,19 @@ class GameRoom {
         const pIndex = this.players.findIndex(p => p.id === playerId);
         if (pIndex !== this.currentPlayerIndex) return;
         
-        // Karte ziehen
         const player = this.players[pIndex];
         const newCards = this.drawCards(1);
         player.hand.push(...newCards);
         
-        // CHECK: Kann der Spieler jetzt irgendwas legen?
         const hasValidMove = player.hand.some(c => this.isValidMove(c));
 
         if (hasValidMove) {
-            // Ja: Spieler darf legen, Zug geht weiter (Timer läuft weiter)
             this.statusMessage = `${player.name} hat gezogen...`;
             this.broadcastState();
         } else {
-            // Nein: Zug wird automatisch beendet
             this.statusMessage = `${player.name} kann nicht legen.`;
             this.broadcastState();
             
-            // Kurze Pause, damit man die gezogene Karte sieht, dann nächster Spieler
             setTimeout(() => {
                 this.nextPlayer();
                 this.broadcastState();
@@ -300,17 +291,12 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('playCard', ({ roomId, cardIndex, color, voice }) => {
+    socket.on('playCard', ({ roomId, cardIndex, color }) => {
         roomId = roomId.toString();
         const room = rooms[roomId];
         if (room) {
             room.playCard(socket.id, cardIndex, color);
-            const player = room.players.find(p => p.socketId === socket.id);
-            if(player && player.hand.length === 1 && !voice) {
-                player.hand.push(...room.drawCards(2));
-                room.statusMessage = `${player.name} vergaß zu rufen! Strafe (+2)`;
-                room.broadcastState();
-            }
+            // Keine Strafe mehr prüfen
         }
     });
 
@@ -327,7 +313,6 @@ io.on('connection', (socket) => {
             const room = rooms[rId];
             const idx = room.players.findIndex(p => p.socketId === socket.id);
             if (idx !== -1) {
-                // Timer stoppen, wenn der aktive Spieler geht
                 if (room.gameActive && idx === room.currentPlayerIndex) {
                     if (room.turnTimer) clearTimeout(room.turnTimer);
                 }
@@ -340,7 +325,6 @@ io.on('connection', (socket) => {
                     if(!room.gameActive) {
                         room.broadcastLobby();
                     } else {
-                        // Spiel wird beendet wenn einer geht (einfachheitshalber)
                         io.to(rId).emit('playerLeft', 'Ein Schatten ist verschwunden. Spiel beendet.');
                         delete rooms[rId];
                     }
