@@ -6,13 +6,13 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: "*" }
+    cors: { origin: "*" },
+    // WICHTIG: Erlaubt stabile Verbindungen
+    connectionStateRecovery: {}
 });
 
-// Statische Dateien aus 'public' bereitstellen
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Explizite Route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -120,7 +120,6 @@ class GameRoom {
 
         if (!valid) return;
 
-        // Karte spielen
         player.hand.splice(cardIndex, 1);
         this.discardPile.push(card);
         
@@ -203,10 +202,10 @@ class GameRoom {
     }
 
     broadcastLobby() {
-        // HIER WAR DER FEHLER: Wir senden jetzt die hostID, nicht nur "isHost"
         io.to(this.roomId).emit('lobbyUpdate', { 
             players: this.players.map(p => p.name),
             hostId: this.players.length > 0 ? this.players[0].socketId : null,
+            hostName: this.players.length > 0 ? this.players[0].name : "Niemand",
             canStart: this.players.length >= 2
         });
     }
@@ -216,6 +215,9 @@ const rooms = {};
 
 io.on('connection', (socket) => {
     socket.on('joinGame', ({ name, roomId }) => {
+        // Sicherstellen, dass roomId ein String ist
+        roomId = roomId.toString();
+
         if (!rooms[roomId]) {
             rooms[roomId] = new GameRoom(roomId);
         }
@@ -230,15 +232,18 @@ io.on('connection', (socket) => {
                 socketId: socket.id
             });
             socket.join(roomId);
-            room.broadcastLobby(); // Neue Methode aufrufen
+            room.broadcastLobby();
+        } else if (existingPlayer) {
+             // Spieler ist schon drin (z.B. Refresh), Lobby Update senden
+             room.broadcastLobby();
         } else {
              socket.emit('error', 'Raum voll oder Spiel läuft bereits.');
         }
     });
 
     socket.on('startGame', ({ roomId }) => {
+        roomId = roomId.toString();
         const room = rooms[roomId];
-        // Sicherstellen, dass nur der Host (erster Spieler) starten kann
         if (room && room.players.length > 0 && room.players[0].socketId === socket.id) {
             if(room.startGame()) {
                 room.broadcastState();
@@ -271,13 +276,11 @@ io.on('connection', (socket) => {
             const room = rooms[rId];
             const idx = room.players.findIndex(p => p.socketId === socket.id);
             if (idx !== -1) {
-                const wasHost = (idx === 0);
                 room.players.splice(idx, 1);
                 
                 if(room.players.length === 0) {
                     delete rooms[rId];
                 } else {
-                    // Wenn Spiel noch nicht läuft, Lobby updaten
                     if(!room.gameActive) {
                         room.broadcastLobby();
                     } else {
