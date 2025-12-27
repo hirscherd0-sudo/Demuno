@@ -189,7 +189,7 @@
 
             <div id="status-display" class="text-[12px] md:text-sm text-red-400 italic text-center h-4 min-w-[200px] z-50">Lade...</div>
             
-            <button id="voice-btn" onclick="toggleVoice()" class="opacity-30 px-4 py-1 bg-red-900 border border-red-500 text-white rounded-full text-[10px] font-bold transition-all z-50">"DEMUNO" RUFEN</button>
+            <!-- BUTTON HIER ENTFERNT -->
         </div>
 
         <!-- Bottom: Real Player -->
@@ -230,7 +230,6 @@
         
         let myRoomId = '';
         let pendingCardIndex = null; 
-        let voiceActive = false;
 
         function joinGame() {
             const name = document.getElementById('player-name').value;
@@ -287,11 +286,6 @@
             const myArea = document.getElementById('my-area');
             if(state.isMyTurn) myArea.classList.add('active-player');
             else myArea.classList.remove('active-player');
-
-            if(!state.isMyTurn) {
-                voiceActive = false;
-                updateVoiceBtn();
-            }
 
             if(!state.gameActive && state.status.includes('ERLÖST')) {
                 showGameOver(state.status);
@@ -394,31 +388,12 @@
             socket.emit('playCard', {
                 roomId: myRoomId,
                 cardIndex: idx,
-                color: color,
-                voice: voiceActive
+                color: color
             });
-            voiceActive = false;
-            updateVoiceBtn();
         }
 
         function drawCard() {
             socket.emit('drawCard', { roomId: myRoomId });
-        }
-
-        function toggleVoice() {
-            voiceActive = !voiceActive;
-            updateVoiceBtn();
-        }
-
-        function updateVoiceBtn() {
-            const btn = document.getElementById('voice-btn');
-            if(voiceActive) {
-                btn.classList.remove('opacity-30');
-                btn.classList.add('animate-pulse', 'bg-red-600');
-            } else {
-                btn.classList.add('opacity-30');
-                btn.classList.remove('animate-pulse', 'bg-red-600');
-            }
         }
 
         function updateStatus(msg) {
