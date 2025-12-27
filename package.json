@@ -1,7 +1,7 @@
 {
   "name": "nightfall-uno-multiplayer",
-  "version": "1.0.0",
-  "description": "Horror Uno Multiplayer",
+  "version": "1.0.1",
+  "description": "Horror Uno Multiplayer Fixed",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -15,4 +15,5 @@
     "node": ">=14.0.0"
   }
 }
+
 
