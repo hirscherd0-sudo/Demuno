@@ -9,10 +9,12 @@ const io = new Server(server, {
     cors: { origin: "*" }
 });
 
+// Statische Dateien (CSS, JS, Bilder) aus dem aktuellen Ordner bereitstellen
 app.use(express.static(path.join(__dirname, '/')));
 
+// Hauptseite ausliefern - HIER WAR DER FEHLER (path.join statt __join)
 app.get('/', (req, res) => {
-    res.sendFile(__join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // --- SPIEL LOGIK ---
@@ -184,17 +186,6 @@ class GameRoom {
         this.broadcastState();
     }
     
-    // Check if player forgot "Voice" (Uno)
-    checkVoice(playerId, calledVoice) {
-         const pIndex = this.players.findIndex(p => p.id === playerId);
-         const player = this.players[pIndex];
-         if(player.hand.length === 1 && !calledVoice) {
-             player.hand.push(...this.drawCards(2));
-             this.statusMessage = `${player.name} vergaß zu rufen! (+2)`;
-             this.broadcastState();
-         }
-    }
-
     broadcastState() {
         // Wir senden an jeden Spieler eine angepasste Ansicht (er sieht nur seine Karten)
         this.players.forEach(p => {
@@ -229,7 +220,6 @@ io.on('connection', (socket) => {
         }
         
         const room = rooms[roomId];
-        // Check if player already exists (reconnect) or new
         const existingPlayer = room.players.find(p => p.socketId === socket.id);
         
         if (!existingPlayer && room.players.length < 5 && !room.gameActive) {
@@ -241,8 +231,7 @@ io.on('connection', (socket) => {
             });
             socket.join(roomId);
             
-            // Broadcast lobby info
-             io.to(roomId).emit('lobbyUpdate', { 
+            io.to(roomId).emit('lobbyUpdate', { 
                 players: room.players.map(p => p.name),
                 isHost: room.players[0].socketId === socket.id
             });
@@ -263,21 +252,7 @@ io.on('connection', (socket) => {
     socket.on('playCard', ({ roomId, cardIndex, color, voice }) => {
         const room = rooms[roomId];
         if (room) {
-            // Check voice first
-            if(voice) {
-                 // Player claims they called voice
-            } else {
-                // Logic to punish is inside next turn calculation usually, 
-                // but for simplicity we check strictly on play
-                const player = room.players.find(p => p.socketId === socket.id);
-                if(player.hand.length === 2) { // Will have 1 after play
-                     // We handle "Forgot Voice" inside the PlayCard logic if needed, 
-                     // or we trust the client sends 'voice: true'
-                }
-            }
-            
             room.playCard(socket.id, cardIndex, color);
-            // Check penalty after play if they have 1 card left and didn't flag voice
             const player = room.players.find(p => p.socketId === socket.id);
             if(player && player.hand.length === 1 && !voice) {
                 player.hand.push(...room.drawCards(2));
@@ -295,9 +270,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        // Cleanup logic would go here. For now, simple removal breaks game flow 
-        // so we might just mark them as disconnected in a full production app.
-        // For this demo, if a player leaves, the room dies.
         for (const rId in rooms) {
             const room = rooms[rId];
             const idx = room.players.findIndex(p => p.socketId === socket.id);
@@ -314,4 +286,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Das Portal ist geöffnet auf Port ${PORT}`);
 });
+
 
