@@ -41,7 +41,6 @@
             user-select: none;
             background-size: cover;
             flex-shrink: 0;
-            /* WICHTIG: Damit Klicks funktionieren */
             pointer-events: auto;
             touch-action: manipulation;
         }
@@ -92,7 +91,7 @@
             height: 100%;
             box-shadow: inset 0 0 150px #000;
             pointer-events: none;
-            z-index: 50; /* Darf nicht höher als Karten sein */
+            z-index: 50; 
         }
 
         .player-label {
@@ -109,7 +108,6 @@
             width: 100%;
             max-width: 100vw;
             padding: 0 10px;
-            /* WICHTIG: Höherer Z-Index als Vignette */
             position: relative;
             z-index: 100;
             pointer-events: auto;
@@ -123,13 +121,11 @@
             margin-left: 0;
         }
         
-        /* Damit der Stapel sicher klickbar ist */
         #draw-pile {
             z-index: 60;
             position: relative;
         }
 
-        /* Lobby Styles */
         #login-screen {
             background: rgba(0,0,0,0.95);
             z-index: 500;
@@ -179,7 +175,6 @@
         
         <!-- Opponents Area (Dynamic) -->
         <div id="opponents-container" class="flex flex-wrap justify-around items-start flex-grow p-2 gap-2">
-            <!-- Opponents will be injected here via JS -->
         </div>
 
         <!-- Center: Table -->
@@ -226,7 +221,6 @@
     </div>
 
     <script>
-        // CRITICAL FIX: Force Websocket Transport to avoid ID changes on Render
         const socket = io({
             transports: ['websocket'], 
             upgrade: false
@@ -238,7 +232,6 @@
         let pendingCardIndex = null; 
         let voiceActive = false;
 
-        // --- Connection / Lobby ---
         function joinGame() {
             const name = document.getElementById('player-name').value;
             myRoomId = document.getElementById('room-id').value;
@@ -256,12 +249,9 @@
             list.innerHTML = data.players.map(p => `<div>👻 ${p}</div>`).join('');
 
             const iAmHost = socket.id === data.hostId;
-            
             const startBtn = document.getElementById('start-btn');
             const waitMsg = document.getElementById('wait-msg');
 
-            let hostText = `Host ist: ${data.hostName}`;
-            
             if(iAmHost) {
                 if(data.canStart) {
                     startBtn.classList.remove('hidden');
@@ -281,8 +271,6 @@
         function startGame() {
             socket.emit('startGame', { roomId: myRoomId });
         }
-
-        // --- Game Logic ---
 
         socket.on('gameState', (state) => {
             if(!state.gameActive && !document.getElementById('game-over').classList.contains('hidden')) return; 
@@ -322,11 +310,9 @@
             hand.forEach((card, idx) => {
                 const cardEl = createCardUI(card);
                 if(isMyTurn) {
-                    // Explizit den Cursor ändern und Event setzen
                     cardEl.style.cursor = 'pointer';
                     cardEl.onclick = (e) => {
-                        e.stopPropagation(); // Verhindern, dass Klick verschluckt wird
-                        console.log("Karte geklickt:", idx); // Client Debug
+                        e.stopPropagation();
                         tryPlayCard(idx, card);
                     };
                 } else {
@@ -405,7 +391,6 @@
         }
 
         function emitPlay(idx, color) {
-            console.log("Sende Spielzug..."); // Debug
             socket.emit('playCard', {
                 roomId: myRoomId,
                 cardIndex: idx,
@@ -417,7 +402,6 @@
         }
 
         function drawCard() {
-            console.log("Ziehe Karte..."); // Debug
             socket.emit('drawCard', { roomId: myRoomId });
         }
 
@@ -450,7 +434,7 @@
             const div = document.createElement('div');
             if (hidden) {
                 div.className = 'card card-back';
-                div.innerHTML = `<svg class="ghost-svg" viewBox="0 0 24 24"><path d="M12 2c-4.418 0-8 3.582-8 8v10c0 .552.448 1 1 1s1-.448 1-1v-1c0-.552.448-1 1-1s1 .448 1 1v1c0 .552.448 1 1 1s1-.448 1-1v-1c0-.552.448-1 1-1s1 .448 1 1v1c0 .552.448 1 1 1s1-.448 1-1v-1c0-.552.448-1 1-1s1 .448 1 1v1c0 .552.448 1 1 1s1-.448 1-1v-10c0-4.418-3.582-8-8-8zm-3 9c-.552 0-1-.448-1-1s.448-1 1-1 1 .448 1 1-.448 1-1 1zm6 0c-.552 0-1-.448-1-1s.448-1 1-1 1 .448 1 1-.448 1-1 1z"/></svg>`;
+                div.innerHTML = `<svg class="ghost-svg" viewBox="0 0 24 24"><path d="M12 2c-4.418 0-8 3.582-8 8v10c0 .552.448 1 1 1s1-.448 1-1v-1c0-.552.448-1 1-1s1 .448 1 1v1c0 .552.448 1 1 1s1-.448 1-1v-1c0-.552.448-1 1-1s1 .448 1 1v1c0 .552.448 1 1 1s1-.448 1-1v-10c0-4.418-3.582-8-8-8zm-3 9c-.552 0-1-.448-1-1s.448-1 1-1 1 .448 1 1-.448 1-1 1zm6 0c-.552 0-1-.448-1-1s.448-1 1-1 1 .448 1 1-.448 1-1 1z"/></svg>`;
                 return div;
             }
             
