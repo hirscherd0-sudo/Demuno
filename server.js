@@ -5,9 +5,10 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
+
+// WICHTIG: ConnectionStateRecovery hilft bei mobilen Verbindungsabbrüchen
 const io = new Server(server, {
     cors: { origin: "*" },
-    // WICHTIG: Erlaubt stabile Verbindungen
     connectionStateRecovery: {}
 });
 
@@ -104,13 +105,34 @@ class GameRoom {
     }
 
     playCard(playerId, cardIndex, chosenColor = null) {
-        if (!this.gameActive) return;
+        console.log(`[GAME] Spielzug von ${playerId}, Karte Index: ${cardIndex}`);
+        
+        if (!this.gameActive) {
+            console.log("[GAME-FAIL] Spiel nicht aktiv");
+            return;
+        }
+
         const pIndex = this.players.findIndex(p => p.id === playerId);
-        if (pIndex !== this.currentPlayerIndex) return;
+        if (pIndex === -1) {
+             console.log("[GAME-FAIL] Spieler nicht gefunden:", playerId);
+             return;
+        }
+
+        if (pIndex !== this.currentPlayerIndex) {
+            console.log(`[GAME-FAIL] Falscher Spieler. Dran ist Index ${this.currentPlayerIndex}, versucht hat Index ${pIndex}`);
+            return;
+        }
 
         const player = this.players[pIndex];
+        if(!player.hand[cardIndex]) {
+             console.log("[GAME-FAIL] Karte existiert nicht am Index");
+             return;
+        }
+
         const card = player.hand[cardIndex];
         const top = this.discardPile[this.discardPile.length - 1];
+
+        console.log(`[GAME] Check Karte: ${card.color} ${card.value} auf ${this.activeColor} / ${top.value}`);
 
         // Validierung
         let valid = false;
@@ -118,8 +140,12 @@ class GameRoom {
         else if (card.color === this.activeColor) valid = true;
         else if (card.value === top.value) valid = true;
 
-        if (!valid) return;
+        if (!valid) {
+            console.log("[GAME-FAIL] Ungültiger Zug");
+            return;
+        }
 
+        // Karte spielen
         player.hand.splice(cardIndex, 1);
         this.discardPile.push(card);
         
@@ -171,8 +197,12 @@ class GameRoom {
 
     playerDraw(playerId) {
          if (!this.gameActive) return;
+         
         const pIndex = this.players.findIndex(p => p.id === playerId);
-        if (pIndex !== this.currentPlayerIndex) return;
+        if (pIndex !== this.currentPlayerIndex) {
+            console.log(`[DRAW-FAIL] Nicht am Zug. ${playerId}`);
+            return;
+        }
         
         this.players[pIndex].hand.push(...this.drawCards(1));
         this.statusMessage = `${this.players[pIndex].name} zieht aus dem Schatten...`;
@@ -214,12 +244,14 @@ class GameRoom {
 const rooms = {};
 
 io.on('connection', (socket) => {
+    console.log('Verbindung:', socket.id);
+
     socket.on('joinGame', ({ name, roomId }) => {
-        // Sicherstellen, dass roomId ein String ist
-        roomId = roomId.toString();
+        roomId = roomId.toString(); // Safety First
 
         if (!rooms[roomId]) {
             rooms[roomId] = new GameRoom(roomId);
+            console.log(`Raum ${roomId} erstellt.`);
         }
         const room = rooms[roomId];
         const existingPlayer = room.players.find(p => p.socketId === socket.id);
@@ -232,9 +264,9 @@ io.on('connection', (socket) => {
                 socketId: socket.id
             });
             socket.join(roomId);
+            console.log(`Spieler ${name} (${socket.id}) ist Raum ${roomId} beigetreten.`);
             room.broadcastLobby();
         } else if (existingPlayer) {
-             // Spieler ist schon drin (z.B. Refresh), Lobby Update senden
              room.broadcastLobby();
         } else {
              socket.emit('error', 'Raum voll oder Spiel läuft bereits.');
@@ -245,6 +277,7 @@ io.on('connection', (socket) => {
         roomId = roomId.toString();
         const room = rooms[roomId];
         if (room && room.players.length > 0 && room.players[0].socketId === socket.id) {
+            console.log(`Spiel gestartet in Raum ${roomId}`);
             if(room.startGame()) {
                 room.broadcastState();
             }
@@ -252,6 +285,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('playCard', ({ roomId, cardIndex, color, voice }) => {
+        roomId = roomId.toString();
+        console.log(`Request playCard in Raum ${roomId}`);
         const room = rooms[roomId];
         if (room) {
             room.playCard(socket.id, cardIndex, color);
@@ -261,10 +296,13 @@ io.on('connection', (socket) => {
                 room.statusMessage = `${player.name} vergaß zu rufen! Strafe (+2)`;
                 room.broadcastState();
             }
+        } else {
+            console.log(`Raum ${roomId} für playCard nicht gefunden!`);
         }
     });
 
     socket.on('drawCard', ({ roomId }) => {
+        roomId = roomId.toString();
         const room = rooms[roomId];
         if (room) {
             room.playerDraw(socket.id);
@@ -272,6 +310,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        console.log('Disconnect:', socket.id);
         for (const rId in rooms) {
             const room = rooms[rId];
             const idx = room.players.findIndex(p => p.socketId === socket.id);
@@ -280,6 +319,7 @@ io.on('connection', (socket) => {
                 
                 if(room.players.length === 0) {
                     delete rooms[rId];
+                    console.log(`Raum ${rId} gelöscht (leer).`);
                 } else {
                     if(!room.gameActive) {
                         room.broadcastLobby();
