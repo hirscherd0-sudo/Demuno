@@ -9,30 +9,15 @@ const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-// KORREKTUR: Wir sagen dem Server, dass statische Dateien im Ordner 'public' liegen
+// Statische Dateien aus 'public' bereitstellen
 app.use(express.static(path.join(__dirname, 'public')));
 
-console.log("Server gestartet. Suche Dateien im Ordner:", path.join(__dirname, 'public'));
-
-// Explizite Route für die Startseite
+// Explizite Route
 app.get('/', (req, res) => {
-    // KORREKTUR: Pfad zeigt jetzt auf public/index.html
-    const indexPath = path.join(__dirname, 'public', 'index.html');
-    
-    res.sendFile(indexPath, (err) => {
-        if (err) {
-            console.error("KRITISCHER FEHLER: index.html nicht gefunden!", err);
-            res.status(500).send(`
-                <h1>Fehler 500</h1>
-                <p>Die Datei <b>index.html</b> wurde nicht gefunden.</p>
-                <p>Der Server sucht hier: ${indexPath}</p>
-                <p>Bitte stelle sicher, dass ein Ordner namens 'public' existiert und die Datei dort liegt.</p>
-            `);
-        }
-    });
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// --- SPIEL LOGIK (Unverändert) ---
+// --- SPIEL LOGIK ---
 const COLORS = ['red', 'blue', 'green', 'yellow'];
 const VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'Jump Scare', 'Ritual', 'Blutpakt'];
 
@@ -145,7 +130,6 @@ class GameRoom {
             this.activeColor = card.color;
         }
 
-        // Action Karten Logik
         let skipNext = false;
         
         if (player.hand.length === 0) {
@@ -217,6 +201,15 @@ class GameRoom {
             });
         });
     }
+
+    broadcastLobby() {
+        // HIER WAR DER FEHLER: Wir senden jetzt die hostID, nicht nur "isHost"
+        io.to(this.roomId).emit('lobbyUpdate', { 
+            players: this.players.map(p => p.name),
+            hostId: this.players.length > 0 ? this.players[0].socketId : null,
+            canStart: this.players.length >= 2
+        });
+    }
 }
 
 const rooms = {};
@@ -237,10 +230,7 @@ io.on('connection', (socket) => {
                 socketId: socket.id
             });
             socket.join(roomId);
-            io.to(roomId).emit('lobbyUpdate', { 
-                players: room.players.map(p => p.name),
-                isHost: room.players[0].socketId === socket.id
-            });
+            room.broadcastLobby(); // Neue Methode aufrufen
         } else {
              socket.emit('error', 'Raum voll oder Spiel läuft bereits.');
         }
@@ -248,7 +238,8 @@ io.on('connection', (socket) => {
 
     socket.on('startGame', ({ roomId }) => {
         const room = rooms[roomId];
-        if (room && room.players[0].socketId === socket.id) {
+        // Sicherstellen, dass nur der Host (erster Spieler) starten kann
+        if (room && room.players.length > 0 && room.players[0].socketId === socket.id) {
             if(room.startGame()) {
                 room.broadcastState();
             }
@@ -280,9 +271,20 @@ io.on('connection', (socket) => {
             const room = rooms[rId];
             const idx = room.players.findIndex(p => p.socketId === socket.id);
             if (idx !== -1) {
+                const wasHost = (idx === 0);
                 room.players.splice(idx, 1);
-                io.to(rId).emit('playerLeft', 'Ein Schatten ist verschwunden. Spiel beendet.');
-                delete rooms[rId];
+                
+                if(room.players.length === 0) {
+                    delete rooms[rId];
+                } else {
+                    // Wenn Spiel noch nicht läuft, Lobby updaten
+                    if(!room.gameActive) {
+                        room.broadcastLobby();
+                    } else {
+                        io.to(rId).emit('playerLeft', 'Ein Schatten ist verschwunden. Spiel beendet.');
+                        delete rooms[rId];
+                    }
+                }
             }
         }
     });
