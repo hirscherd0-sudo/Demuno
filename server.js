@@ -6,7 +6,6 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// WICHTIG: ConnectionStateRecovery hilft bei mobilen Verbindungsabbrüchen
 const io = new Server(server, {
     cors: { origin: "*" },
     connectionStateRecovery: {}
@@ -33,6 +32,7 @@ class GameRoom {
         this.activeColor = '';
         this.gameActive = false;
         this.statusMessage = "Warte auf Spieler...";
+        this.turnTimer = null; // Timer für Spielzüge
     }
 
     buildDeck() {
@@ -88,7 +88,27 @@ class GameRoom {
         this.currentPlayerIndex = 0;
         this.gameActive = true;
         this.statusMessage = "Die Nacht beginnt...";
+        
+        this.startTurnTimer(); // Timer starten
         return true;
+    }
+
+    // Startet den 60s Timer für den aktuellen Spieler
+    startTurnTimer() {
+        if (this.turnTimer) clearTimeout(this.turnTimer);
+        
+        this.turnTimer = setTimeout(() => {
+            if (this.gameActive) {
+                const pName = this.players[this.currentPlayerIndex].name;
+                this.statusMessage = `${pName} hat geschlafen! (Zeit abgelaufen)`;
+                
+                // Strafe: 1 Karte ziehen und Zug vorbei
+                this.players[this.currentPlayerIndex].hand.push(...this.drawCards(1));
+                
+                this.nextPlayer();
+                this.broadcastState();
+            }
+        }, 60000); // 60 Sekunden = 1 Minute
     }
 
     nextPlayer(skip = false) {
@@ -102,48 +122,28 @@ class GameRoom {
             if (n < 0) n = this.players.length - 1;
         }
         this.currentPlayerIndex = n;
+        this.startTurnTimer(); // Timer für neuen Spieler neu starten
+    }
+
+    // Hilfsfunktion: Kann diese Karte gelegt werden?
+    isValidMove(card) {
+        const top = this.discardPile[this.discardPile.length - 1];
+        if (card.color === 'black') return true;
+        if (card.color === this.activeColor) return true;
+        if (card.value === top.value) return true;
+        return false;
     }
 
     playCard(playerId, cardIndex, chosenColor = null) {
-        console.log(`[GAME] Spielzug von ${playerId}, Karte Index: ${cardIndex}`);
+        if (!this.gameActive) return;
         
-        if (!this.gameActive) {
-            console.log("[GAME-FAIL] Spiel nicht aktiv");
-            return;
-        }
-
         const pIndex = this.players.findIndex(p => p.id === playerId);
-        if (pIndex === -1) {
-             console.log("[GAME-FAIL] Spieler nicht gefunden:", playerId);
-             return;
-        }
-
-        if (pIndex !== this.currentPlayerIndex) {
-            console.log(`[GAME-FAIL] Falscher Spieler. Dran ist Index ${this.currentPlayerIndex}, versucht hat Index ${pIndex}`);
-            return;
-        }
+        if (pIndex !== this.currentPlayerIndex) return;
 
         const player = this.players[pIndex];
-        if(!player.hand[cardIndex]) {
-             console.log("[GAME-FAIL] Karte existiert nicht am Index");
-             return;
-        }
-
         const card = player.hand[cardIndex];
-        const top = this.discardPile[this.discardPile.length - 1];
-
-        console.log(`[GAME] Check Karte: ${card.color} ${card.value} auf ${this.activeColor} / ${top.value}`);
-
-        // Validierung
-        let valid = false;
-        if (card.color === 'black') valid = true;
-        else if (card.color === this.activeColor) valid = true;
-        else if (card.value === top.value) valid = true;
-
-        if (!valid) {
-            console.log("[GAME-FAIL] Ungültiger Zug");
-            return;
-        }
+        
+        if (!this.isValidMove(card)) return; // Nochmaliger Check
 
         // Karte spielen
         player.hand.splice(cardIndex, 1);
@@ -154,6 +154,9 @@ class GameRoom {
         } else {
             this.activeColor = card.color;
         }
+
+        // Timer stoppen, da Zug gemacht wurde
+        if (this.turnTimer) clearTimeout(this.turnTimer);
 
         let skipNext = false;
         
@@ -199,15 +202,31 @@ class GameRoom {
          if (!this.gameActive) return;
          
         const pIndex = this.players.findIndex(p => p.id === playerId);
-        if (pIndex !== this.currentPlayerIndex) {
-            console.log(`[DRAW-FAIL] Nicht am Zug. ${playerId}`);
-            return;
-        }
+        if (pIndex !== this.currentPlayerIndex) return;
         
-        this.players[pIndex].hand.push(...this.drawCards(1));
-        this.statusMessage = `${this.players[pIndex].name} zieht aus dem Schatten...`;
-        this.nextPlayer();
-        this.broadcastState();
+        // Karte ziehen
+        const player = this.players[pIndex];
+        const newCards = this.drawCards(1);
+        player.hand.push(...newCards);
+        
+        // CHECK: Kann der Spieler jetzt irgendwas legen?
+        const hasValidMove = player.hand.some(c => this.isValidMove(c));
+
+        if (hasValidMove) {
+            // Ja: Spieler darf legen, Zug geht weiter (Timer läuft weiter)
+            this.statusMessage = `${player.name} hat gezogen...`;
+            this.broadcastState();
+        } else {
+            // Nein: Zug wird automatisch beendet
+            this.statusMessage = `${player.name} kann nicht legen.`;
+            this.broadcastState();
+            
+            // Kurze Pause, damit man die gezogene Karte sieht, dann nächster Spieler
+            setTimeout(() => {
+                this.nextPlayer();
+                this.broadcastState();
+            }, 1500);
+        }
     }
     
     broadcastState() {
@@ -247,11 +266,10 @@ io.on('connection', (socket) => {
     console.log('Verbindung:', socket.id);
 
     socket.on('joinGame', ({ name, roomId }) => {
-        roomId = roomId.toString(); // Safety First
+        roomId = roomId.toString();
 
         if (!rooms[roomId]) {
             rooms[roomId] = new GameRoom(roomId);
-            console.log(`Raum ${roomId} erstellt.`);
         }
         const room = rooms[roomId];
         const existingPlayer = room.players.find(p => p.socketId === socket.id);
@@ -264,7 +282,6 @@ io.on('connection', (socket) => {
                 socketId: socket.id
             });
             socket.join(roomId);
-            console.log(`Spieler ${name} (${socket.id}) ist Raum ${roomId} beigetreten.`);
             room.broadcastLobby();
         } else if (existingPlayer) {
              room.broadcastLobby();
@@ -277,7 +294,6 @@ io.on('connection', (socket) => {
         roomId = roomId.toString();
         const room = rooms[roomId];
         if (room && room.players.length > 0 && room.players[0].socketId === socket.id) {
-            console.log(`Spiel gestartet in Raum ${roomId}`);
             if(room.startGame()) {
                 room.broadcastState();
             }
@@ -286,7 +302,6 @@ io.on('connection', (socket) => {
 
     socket.on('playCard', ({ roomId, cardIndex, color, voice }) => {
         roomId = roomId.toString();
-        console.log(`Request playCard in Raum ${roomId}`);
         const room = rooms[roomId];
         if (room) {
             room.playCard(socket.id, cardIndex, color);
@@ -296,8 +311,6 @@ io.on('connection', (socket) => {
                 room.statusMessage = `${player.name} vergaß zu rufen! Strafe (+2)`;
                 room.broadcastState();
             }
-        } else {
-            console.log(`Raum ${roomId} für playCard nicht gefunden!`);
         }
     });
 
@@ -310,20 +323,24 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log('Disconnect:', socket.id);
         for (const rId in rooms) {
             const room = rooms[rId];
             const idx = room.players.findIndex(p => p.socketId === socket.id);
             if (idx !== -1) {
+                // Timer stoppen, wenn der aktive Spieler geht
+                if (room.gameActive && idx === room.currentPlayerIndex) {
+                    if (room.turnTimer) clearTimeout(room.turnTimer);
+                }
+
                 room.players.splice(idx, 1);
                 
                 if(room.players.length === 0) {
                     delete rooms[rId];
-                    console.log(`Raum ${rId} gelöscht (leer).`);
                 } else {
                     if(!room.gameActive) {
                         room.broadcastLobby();
                     } else {
+                        // Spiel wird beendet wenn einer geht (einfachheitshalber)
                         io.to(rId).emit('playerLeft', 'Ein Schatten ist verschwunden. Spiel beendet.');
                         delete rooms[rId];
                     }
