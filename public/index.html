@@ -155,8 +155,11 @@
         <div id="lobby-wait" class="hidden flex flex-col items-center gap-4">
             <p class="text-xl">Warte in der Dunkelheit...</p>
             <div id="player-list" class="text-red-400"></div>
-            <button id="start-btn" onclick="startGame()" class="hidden px-6 py-2 bg-green-900 text-white rounded mt-4 border border-green-700">NACHT BEGINNEN</button>
-            <p class="text-xs text-gray-500 mt-2">Warte auf Host...</p>
+            
+            <!-- HIER WURDE GEÄNDERT: Button ist standardmäßig versteckt -->
+            <button id="start-btn" onclick="startGame()" class="hidden px-6 py-2 bg-green-900 text-white rounded mt-4 border border-green-700 hover:bg-green-800">NACHT BEGINNEN</button>
+            
+            <p id="wait-msg" class="text-xs text-gray-500 mt-2">Warte auf Host...</p>
         </div>
     </div>
 
@@ -236,8 +239,21 @@
             const list = document.getElementById('player-list');
             list.innerHTML = data.players.map(p => `<div>👻 ${p}</div>`).join('');
 
-            if(data.isHost && data.players.length >= 2) {
-                document.getElementById('start-btn').classList.remove('hidden');
+            // LOGIK FIX: Client prüft jetzt selbst, ob er der Host ist
+            const iAmHost = socket.id === data.hostId;
+            
+            const startBtn = document.getElementById('start-btn');
+            const waitMsg = document.getElementById('wait-msg');
+
+            if(iAmHost && data.canStart) {
+                startBtn.classList.remove('hidden');
+                waitMsg.innerText = "Bereit zum Starten...";
+            } else if (iAmHost && !data.canStart) {
+                startBtn.classList.add('hidden');
+                waitMsg.innerText = "Warte auf mehr Spieler (min 2)...";
+            } else {
+                startBtn.classList.add('hidden');
+                waitMsg.innerText = "Warte auf Host...";
             }
         });
 
@@ -422,4 +438,5 @@
     </script>
 </body>
 </html>
+
 
