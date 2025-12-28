@@ -96,7 +96,6 @@ class GameRoom {
     startTurnTimer() {
         if (this.turnTimer) clearTimeout(this.turnTimer);
         
-        // 60 Sekunden Limit pro Zug
         this.turnTimer = setTimeout(() => {
             if (this.gameActive) {
                 const pName = this.players[this.currentPlayerIndex].name;
@@ -254,8 +253,6 @@ class GameRoom {
 const rooms = {};
 
 io.on('connection', (socket) => {
-    console.log('Verbindung:', socket.id);
-
     socket.on('joinGame', ({ name, roomId }) => {
         roomId = roomId.toString();
 
@@ -296,7 +293,6 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (room) {
             room.playCard(socket.id, cardIndex, color);
-            // Keine Strafe mehr prüfen
         }
     });
 
@@ -305,6 +301,23 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (room) {
             room.playerDraw(socket.id);
+        }
+    });
+
+    // --- CHAT LOGIK NEU ---
+    socket.on('chatMessage', ({ roomId, message }) => {
+        roomId = roomId.toString();
+        const room = rooms[roomId];
+        if (room) {
+            // Finde den Namen des Absenders
+            const player = room.players.find(p => p.socketId === socket.id);
+            if (player && message.trim().length > 0) {
+                // Sende Nachricht an ALLE im Raum
+                io.to(roomId).emit('chatMessage', {
+                    name: player.name,
+                    text: message.substring(0, 100) // Begrenze Länge
+                });
+            }
         }
     });
 
