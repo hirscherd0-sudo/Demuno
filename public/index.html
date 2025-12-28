@@ -34,8 +34,8 @@
             transform: translate(-50%, -50%) rotate(-5deg);
             font-family: 'Creepster', cursive;
             font-size: 3rem;
-            color: #500;
-            opacity: 0.2;
+            color: #600; /* Etwas helleres Blutrot für bessere Lesbarkeit */
+            opacity: 0.25;
             pointer-events: none;
             text-shadow: 2px 2px 4px #000;
             width: 100%;
@@ -45,7 +45,12 @@
         }
         
         @media (max-width: 600px) {
-            .branding-watermark { font-size: 1.5rem; }
+            .branding-watermark { 
+                font-size: 1.2rem; 
+                white-space: normal; /* Umbruch auf kleinen Handys erlauben */
+                line-height: 1.2;
+                padding: 0 20px;
+            } 
         }
 
         .card {
@@ -170,13 +175,12 @@
         /* --- CHAT STYLES (TOP RIGHT) --- */
         #chat-container {
             position: fixed;
-            /* Nach oben rechts verschoben */
             top: 10px;
             right: 10px;
             z-index: 400; 
             display: flex;
             flex-direction: column;
-            align-items: flex-end; /* Rechtsbündig */
+            align-items: flex-end;
             pointer-events: auto;
         }
 
@@ -194,7 +198,6 @@
             cursor: pointer;
             box-shadow: 0 0 10px #000;
             transition: all 0.2s;
-            /* Wenn Fenster offen ist, wird der Button ausgeblendet (per JS) */
         }
         
         #chat-btn:active {
@@ -208,7 +211,6 @@
             border: 1px solid #600;
             border-radius: 8px;
             margin-bottom: 10px;
-            /* Standardmäßig versteckt */
             display: none; 
             flex-direction: column;
             overflow: hidden;
@@ -299,7 +301,7 @@
     <div class="vignette"></div>
     
     <!-- BRANDING -->
-    <div class="branding-watermark">R & D Entertainment</div>
+    <div class="branding-watermark">R & D Hirscher Entertainment</div>
 
     <!-- Login / Lobby -->
     <div id="login-screen" class="fixed inset-0 flex flex-col items-center justify-center">
@@ -353,7 +355,6 @@
         <div id="chat-window">
             <div id="chat-header">
                 <span>Dunkler Chat</span>
-                <!-- Button Typ explizit gesetzt, damit er kein Formular absendet -->
                 <button id="chat-close-btn" onclick="toggleChat()" type="button">✕</button>
             </div>
             <div id="chat-messages">
@@ -477,15 +478,12 @@
             chatOpen = !chatOpen;
             
             if (chatOpen) {
-                // Fenster öffnen, Button verstecken
                 win.style.display = 'flex';
                 btn.style.display = 'none';
                 btn.classList.remove('new-msg-anim');
                 
-                // Fokus auf Input
                 setTimeout(() => document.getElementById('chat-input').focus(), 50);
             } else {
-                // Fenster schließen, Button zeigen
                 win.style.display = 'none';
                 btn.style.display = 'flex';
             }
