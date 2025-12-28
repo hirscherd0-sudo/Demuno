@@ -85,7 +85,10 @@ class GameRoom {
         }
         this.discardPile = [first];
         this.activeColor = first.color;
-        this.currentPlayerIndex = 0;
+        
+        // HIER: Zufälligen Startspieler wählen
+        this.currentPlayerIndex = Math.floor(Math.random() * this.players.length);
+        
         this.gameActive = true;
         this.statusMessage = "Die Nacht beginnt...";
         
@@ -304,18 +307,15 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- CHAT LOGIK NEU ---
     socket.on('chatMessage', ({ roomId, message }) => {
         roomId = roomId.toString();
         const room = rooms[roomId];
         if (room) {
-            // Finde den Namen des Absenders
             const player = room.players.find(p => p.socketId === socket.id);
             if (player && message.trim().length > 0) {
-                // Sende Nachricht an ALLE im Raum
                 io.to(roomId).emit('chatMessage', {
                     name: player.name,
-                    text: message.substring(0, 100) // Begrenze Länge
+                    text: message.substring(0, 100) 
                 });
             }
         }
