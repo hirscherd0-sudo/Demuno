@@ -201,7 +201,7 @@
 
         #chat-window {
             width: 280px;
-            height: 200px;
+            height: 230px; /* etwas höher wegen Header */
             background: rgba(0, 0, 0, 0.9);
             border: 1px solid #600;
             border-radius: 8px;
@@ -210,6 +210,30 @@
             flex-direction: column;
             overflow: hidden;
             box-shadow: 0 0 20px #000;
+        }
+        
+        /* Chat Header für Minimize */
+        #chat-header {
+            background: #200;
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #600;
+            font-size: 12px;
+            color: #f88;
+        }
+        
+        #chat-close-btn {
+            background: transparent;
+            border: none;
+            color: #f88;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        #chat-close-btn:hover {
+            color: white;
         }
 
         #chat-messages {
@@ -316,6 +340,10 @@
     <!-- CHAT UI -->
     <div id="chat-container" class="hidden">
         <div id="chat-window" class="hidden">
+            <div id="chat-header">
+                <span>Dunkler Chat</span>
+                <button id="chat-close-btn" onclick="toggleChat()">✕</button>
+            </div>
             <div id="chat-messages">
                 <div class="text-gray-500 italic">Chatraum geöffnet...</div>
             </div>
